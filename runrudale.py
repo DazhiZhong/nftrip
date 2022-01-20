@@ -27,9 +27,10 @@ class ESRGANUpscale():
         else:
             return None
 
-esrgan = ESRGANUpscale(2)
+if __name__ == "__main__":
+    esrgan = ESRGANUpscale(2)
 
-esrgan.gan_upscale("arty3.png","tmp.png")
+    esrgan.gan_upscale("arty3.png","tmp.png")
 
 
 

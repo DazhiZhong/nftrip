@@ -13,6 +13,13 @@ import logging
 from datetime import datetime
 import imageio
 from PIL import Image
+import sys
+import tempfile
+import numpy as np
+from pathlib import Path
+from PIL import Image
+from rudalle.realesrgan.model import RealESRGAN
+from huggingface_hub import hf_hub_url, cached_download
 
 logs_folder = Path('logs')
 logs_folder.mkdir(exist_ok=True, parents=True)
@@ -26,7 +33,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from huggingface_hub import hf_hub_url, cached_download
 
 MODELS = {
     'x2': dict(
@@ -262,6 +268,14 @@ def main(optimization_config):
     
     if optimization_config['gif']:
         make_gif(optimization_config, images_path)
+    
+    
+    scale = optimization_config["esrgan_scale"] 
+    if scale in [2,4,8]:
+        logger.info(f'esr')
+        result_img_path = list(sorted(images_path.glob('*.png')))[-1]
+        esrgan = ESRGANUpscale(optimization_config["esrgan_scale"])
+        esrgan.gan_upscale(str(result_img_path),str(result_img_path)[:-4]+"_esr.png")
 
     # copy results to the respective folder
     copy_output(optimization_config, images_path)
@@ -269,7 +283,25 @@ def main(optimization_config):
     logger.info(f'Time elapsed: {time()-start}')
     
     return True
-    
+  
+
+class ESRGANUpscale():
+    def __init__(self,esrganscale):
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        print(f"using {device} for esrganupscale")
+        self.model = RealESRGAN(device, esrganscale)
+        self.model.load_weights(f"models/RealESRGAN_x{esrganscale}.pth")
+        print("Model loaded!")
+    def gan_upscale(self,imgpath,outpath,return_image=False):
+        input_image = Image.open(str(imgpath))     
+        input_image = input_image.convert('RGB')
+        with torch.no_grad():
+            sr_image = self.model.predict(np.array(input_image))
+        sr_image.save(outpath)
+        if return_image:
+            return sr_image
+        else:
+            return None
 
 
 if __name__ == "__main__":
@@ -294,7 +326,8 @@ if __name__ == "__main__":
     parser.add_argument('--gif', dest='gif', action='store_true')
     parser.add_argument('--no-gif', dest='gif', action='store_false')
     parser.add_argument("--saving_freq", type=int, help="saving frequency for intermediate images (-1 means only final)", default=-1)
-    parser.set_defaults(gif=False)
+    parser.add_argument('--esrgan_scale',type=int, help="2, 4, 8" ,dest='esrgan_scale')
+    parser.set_defaults(gif=False, esrscale=1)
     args = parser.parse_args()
     
     optimization_config = dict()
